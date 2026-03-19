@@ -38,6 +38,27 @@ const char* FRAGMENT_SHADER = R"(
     }
 )";
 
+struct Controls {
+    // Tell if there is movement in x y or z direction (either 1, -1 or 0)
+    double forward = 0.0;  // -z
+    double right = 0.0;    // x
+    double up = 0.0;       // y
+
+    // Mouse movement delta since last frame
+    double mouseDeltaX = 0.0;
+    double mouseDeltaY = 0.0;
+
+    PyObject* to_python_dict() {
+        PyObject* dict = PyDict_New();
+        PyDict_SetItemString(dict, "forward", PyFloat_FromDouble(forward));
+        PyDict_SetItemString(dict, "right", PyFloat_FromDouble(right));
+        PyDict_SetItemString(dict, "up", PyFloat_FromDouble(up));
+        PyDict_SetItemString(dict, "mouseDeltaX", PyFloat_FromDouble(mouseDeltaX));
+        PyDict_SetItemString(dict, "mouseDeltaY", PyFloat_FromDouble(mouseDeltaY));
+        return dict;
+    }
+};
+
 struct TensorInfo {
     PyObject* tensor;
     int64_t pointer;
@@ -69,7 +90,7 @@ void printCudaMemcpy3DParms(const cudaMemcpy3DParms& p) {
     std::cout << "-------------------------" << std::endl;
 }
 
-TensorInfo get_tensor_info() {
+TensorInfo get_tensor_info(Controls controls) {
     PyObject* tensor_module = PyImport_ImportModule("tensor");
     if (!tensor_module) {
         PyErr_Print();
@@ -82,7 +103,8 @@ TensorInfo get_tensor_info() {
         throw std::runtime_error("Failed to get get_tensor function");
     }
 
-    PyObject* tensor = PyObject_CallObject(get_tensor_func, nullptr);
+    PyObject* args = PyTuple_Pack(1, controls.to_python_dict());
+    PyObject* tensor = PyObject_CallObject(get_tensor_func, args);
     if (!tensor) {
         PyErr_Print();
         throw std::runtime_error("Failed to call get_tensor()");
@@ -347,6 +369,9 @@ int main(int argc, char* argv[]) {
     double frameTime = 1.0 / TARGET_FPS;
     double sleepTime = 0.0;
 
+    double lastMouseX, lastMouseY;
+    glfwGetCursorPos(window, &lastMouseX, &lastMouseY);
+
     while (!glfwWindowShouldClose(window)) {
         double loopStart = glfwGetTime();
 
@@ -356,12 +381,45 @@ int main(int argc, char* argv[]) {
             break;
         }
 
+        Controls controls;
+
+        // Keyboard controls - WASD Shift Space
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+            controls.forward += 1.0;
+        }
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
+            controls.forward -= 1.0;
+        }
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+            controls.right -= 1.0;
+        }
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+            controls.right += 1.0;
+        }
+        if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) {
+            controls.up -= 1.0;
+        }
+        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
+            controls.up += 1.0;
+        }
+
+        // Mouse controls - delta x and y
+        double mouseX, mouseY;
+        glfwGetCursorPos(window, &mouseX, &mouseY);
+        controls.mouseDeltaX = mouseX - lastMouseX;
+        controls.mouseDeltaY = mouseY - lastMouseY;
+        lastMouseX = mouseX;
+        lastMouseY = mouseY;
+
+        // Reset mouse position
+        glfwSetCursorPos(window, WIDTH / 2.0, HEIGHT / 2.0);
+
         try {
             if (current_tensor) {
                 Py_DECREF(current_tensor);
             }
 
-            TensorInfo info = get_tensor_info();
+            TensorInfo info = get_tensor_info(controls);
             current_tensor = info.tensor;
             void* cuda_ptr = reinterpret_cast<void*>(info.pointer);
             texture.copyFromCudaPointer(cuda_ptr, info.row_bytes, info.rows);
