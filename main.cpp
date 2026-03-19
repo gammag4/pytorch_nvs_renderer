@@ -15,6 +15,7 @@
 constexpr int WIDTH = 512;
 constexpr int HEIGHT = 512;
 constexpr int CHANNELS = 3;
+constexpr double TARGET_FPS = 60.0;
 
 const char* VERTEX_SHADER = R"(
     #version 330 core
@@ -341,7 +342,14 @@ int main(int argc, char* argv[]) {
     std::cout << "Starting render loop..." << std::endl;
     std::cout << "Press ESC or close window to exit" << std::endl;
 
+    double lastTime = glfwGetTime();
+    int frameCount = 0;
+    double frameTime = 1.0 / TARGET_FPS;
+    double sleepTime = 0.0;
+
     while (!glfwWindowShouldClose(window)) {
+        double loopStart = glfwGetTime();
+
         glfwPollEvents();
 
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
@@ -361,6 +369,20 @@ int main(int argc, char* argv[]) {
         } catch (const std::exception& e) {
             std::cerr << "Error: " << e.what() << std::endl;
             break;
+        }
+
+        frameCount++;
+        double currentTime = glfwGetTime();
+        if (currentTime - lastTime >= 1.0) {
+            std::cout << "\rFPS: " << frameCount << " (target: " << TARGET_FPS << ")" << std::flush;
+            frameCount = 0;
+            lastTime = currentTime;
+        }
+
+        double elapsed = glfwGetTime() - loopStart;
+        double remaining = frameTime - elapsed;
+        if (remaining > 0) {
+            glfwWaitEventsTimeout(remaining);
         }
     }
 
