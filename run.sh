@@ -1,6 +1,6 @@
-conda activate nvs_renderer
+conda activate $1
 mkdir -p build && cd build
 cmake -DPython3_EXECUTABLE=$(which python) ..
 make
 cd ..
-./tensor_renderer
+./build/tensor_renderer $2

@@ -32,7 +32,3 @@ target_link_libraries(tensor_renderer
 target_compile_definitions(tensor_renderer PRIVATE
     PYTHON_AVAILABLE
 )
-
-set_target_properties(tensor_renderer PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-)

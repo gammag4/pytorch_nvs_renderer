@@ -10,7 +10,12 @@
 
 #include <cstring>
 #include <iostream>
+#include <filesystem>
+#include <string>
 #include <vector>
+#include <stdexcept>
+
+namespace fs = std::filesystem;
 
 constexpr int WIDTH = 512;
 constexpr int HEIGHT = 512;
@@ -321,8 +326,16 @@ int main(int argc, char* argv[]) {
         Py_Initialize();
     }
 
+    std::string python_code_path;
+    try {
+        python_code_path = fs::path(std::string(argv[1])).parent_path().string();
+    }
+    catch (const std::runtime_error& e) {
+        std::cerr << "Failed to get python code path: " << e.what() << std::endl;
+        return -1;
+    }
     PyObject* sysPath = PySys_GetObject("path");
-    PyObject* currentDir = PyUnicode_DecodeFSDefault(".");
+    PyObject* currentDir = PyUnicode_DecodeFSDefault(python_code_path.c_str());
     PyList_Append(sysPath, currentDir);
     Py_DECREF(currentDir);
 
