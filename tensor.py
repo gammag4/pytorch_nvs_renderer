@@ -1,4 +1,6 @@
 import torch
+from torchvision.io import decode_image
+import torchvision.transforms as T
 import ctypes
 
 def get_tensor():
@@ -7,7 +9,12 @@ def get_tensor():
     This should not be changed bc it will be used later with images this shape.
     Implement this with your actual tensor generation logic.
     """
-    return torch.randn(3, 512, 512, device='cuda', dtype=torch.float32)
+    with open('Untitled.jpg', 'rb') as f:
+        img_bytes = bytearray(f.read())
+    
+    img_tensor = decode_image(torch.frombuffer(img_bytes, dtype=torch.uint8)).float() / 255.0
+    img_tensor = T.Resize((512, 512))(img_tensor)
+    return img_tensor.to(device='cuda') + torch.randn(3, 512, 512, device='cuda', dtype=torch.float32) * 0.3
 
 
 def get_tensor_info(tensor: torch.Tensor) -> dict:

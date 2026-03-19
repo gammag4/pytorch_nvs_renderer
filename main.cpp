@@ -326,6 +326,11 @@ int main(int argc, char* argv[]) {
     glewInit();
 
     glViewport(0, 0, WIDTH, HEIGHT);
+    // auto setViewport = [](GLFWwindow* window, int width, int height) {
+    //     glViewport(0, 0, width, height);
+    // };
+    // glfwSetFramebufferSizeCallback(window, setViewport);
+    // glfwGetFramebufferSize(window, nullptr, nullptr);  // trigger callback
     glDisable(GL_DEPTH_TEST);
 
     GLuint shaderProgram = createShaderProgram();
