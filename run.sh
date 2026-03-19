@@ -1,8 +1,6 @@
-#python3 -m venv venv && source venv/bin/activate && pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu130
-#conda deactivate
-source venv/bin/activate
+conda activate nvs_renderer
 mkdir -p build && cd build
-cmake ..
+cmake -DPython3_EXECUTABLE=$(which python) ..
 make
 cd ..
 ./tensor_renderer

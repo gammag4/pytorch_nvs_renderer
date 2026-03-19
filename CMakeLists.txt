@@ -1,8 +1,12 @@
 cmake_minimum_required(VERSION 3.16)
+cmake_policy(SET CMP0146 OLD)
 project(tensor_renderer)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+set(Python3_FIND_STRATEGY LOCATION)
+set(Python3_FIND_VIRTUALENV FIRST)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 find_package(CUDA REQUIRED)
