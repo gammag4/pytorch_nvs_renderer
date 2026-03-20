@@ -44,6 +44,17 @@ const char* FRAGMENT_SHADER = R"(
     }
 )";
 
+struct CallbackData {
+    bool running = true;
+    bool escLastPressed = false;
+    double lastMouseX = 0.0;
+    double lastMouseY = 0.0;
+    double angleX = 0.0;
+    double angleY = 0.0;
+    double mouseDeltaX = 0.0;
+    double mouseDeltaY = 0.0;
+};
+
 struct Controls {
     // Tell if there is movement in x y or z direction (either 1, -1 or 0)
     double forward = 0.0;  // -z
@@ -51,6 +62,8 @@ struct Controls {
     double up = 0.0;       // y
 
     // Mouse movement delta since last frame
+    double angleX = 0.0;
+    double angleY = 0.0;
     double mouseDeltaX = 0.0;
     double mouseDeltaY = 0.0;
 
@@ -59,6 +72,8 @@ struct Controls {
         PyDict_SetItemString(dict, "forward", PyFloat_FromDouble(forward));
         PyDict_SetItemString(dict, "right", PyFloat_FromDouble(right));
         PyDict_SetItemString(dict, "up", PyFloat_FromDouble(up));
+        PyDict_SetItemString(dict, "angleX", PyFloat_FromDouble(angleX));
+        PyDict_SetItemString(dict, "angleY", PyFloat_FromDouble(angleY));
         PyDict_SetItemString(dict, "mouseDeltaX", PyFloat_FromDouble(mouseDeltaX));
         PyDict_SetItemString(dict, "mouseDeltaY", PyFloat_FromDouble(mouseDeltaY));
         return dict;
@@ -170,7 +185,7 @@ TensorInfo update(Controls controls) {
 }
 
 class GLTexture {
-   public:
+public:
     GLuint texture_id = 0;
     cudaGraphicsResource* cuda_resource = nullptr;
 
@@ -309,6 +324,48 @@ void render_tensor(GLTexture& texture, GLuint shaderProgram, GLuint quadVAO) {
     glfwSwapBuffers(glfwGetCurrentContext());
 }
 
+void setViewport(GLFWwindow* window, int width, int height) {
+    int l = std::min(width, height);
+    int padX = (width - l) / 2, padY = (height - l) / 2;
+    glViewport(padX, padY, l, l);
+}
+
+void cursorPositionCallback(GLFWwindow* window, double xpos, double ypos) {
+    CallbackData& data = *static_cast<CallbackData*>(glfwGetWindowUserPointer(window));
+    data.mouseDeltaX = xpos - data.lastMouseX;
+    data.mouseDeltaY = ypos - data.lastMouseY;
+    data.angleX += data.mouseDeltaX;
+    data.angleY += data.mouseDeltaY;
+    data.lastMouseX = xpos;
+    data.lastMouseY = ypos;
+}
+
+void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
+    CallbackData& data = *static_cast<CallbackData*>(glfwGetWindowUserPointer(window));
+    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+        data.running = true;
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    }
+}
+
+void escCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+    CallbackData& data = *static_cast<CallbackData*>(glfwGetWindowUserPointer(window));
+    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
+    {
+        if (!data.escLastPressed) {
+            data.escLastPressed = true;
+            if (data.running) {
+                data.running = false;
+                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            }
+            else
+                glfwSetWindowShouldClose(window, GLFW_TRUE);
+        }
+    }
+    else
+        data.escLastPressed = false;
+}
+
 int main(int argc, char* argv[]) {
     if (!Py_IsInitialized()) {
         Py_Initialize();
@@ -349,11 +406,6 @@ int main(int argc, char* argv[]) {
 
     glewInit();
 
-    auto setViewport = [](GLFWwindow* window, int width, int height) {
-        int l = std::min(width, height);
-        int padX = (width - l) / 2, padY = (height - l) / 2;
-        glViewport(padX, padY, l, l);
-    };
     glfwSetFramebufferSizeCallback(window, setViewport);
     int width, height;
     glfwGetFramebufferSize(window, &width, &height);
@@ -373,17 +425,26 @@ int main(int argc, char* argv[]) {
     double frameTime = 1.0 / TARGET_FPS;
     double sleepTime = 0.0;
 
-    double lastMouseX, lastMouseY;
-    glfwGetCursorPos(window, &lastMouseX, &lastMouseY);
+    CallbackData callbackData;
+    glfwSetWindowUserPointer(window, &callbackData);
+
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    glfwGetCursorPos(window, &callbackData.lastMouseX, &callbackData.lastMouseY);
+    glfwSetCursorPosCallback(window, cursorPositionCallback);
+
+    glfwSetMouseButtonCallback(window, mouseButtonCallback);
+
+    glfwSetKeyCallback(window, escCallback);
 
     while (!glfwWindowShouldClose(window)) {
+        cursorPositionCallback(window, callbackData.lastMouseX, callbackData.lastMouseY);
+        
         double loopStart = glfwGetTime();
 
         glfwPollEvents();
 
-        if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
-            break;
-        }
+        if (!callbackData.running)
+            continue;
 
         Controls controls;
 
@@ -407,19 +468,10 @@ int main(int argc, char* argv[]) {
             controls.up += 1.0;
         }
 
-        // Mouse controls - delta x and y
-        double mouseX, mouseY;
-        glfwGetCursorPos(window, &mouseX, &mouseY);
-        controls.mouseDeltaX = mouseX - lastMouseX;
-        controls.mouseDeltaY = mouseY - lastMouseY;
-
-        // Reset mouse position
-        int width, height;
-        glfwGetFramebufferSize(window, &width, &height);
-        glfwSetCursorPos(window, width / 2.0, height / 2.0);
-        glfwGetCursorPos(window, &mouseX, &mouseY);
-        lastMouseX = mouseX;
-        lastMouseY = mouseY;
+        controls.angleX = callbackData.angleX;
+        controls.angleY = callbackData.angleY;
+        controls.mouseDeltaX = callbackData.mouseDeltaX;
+        controls.mouseDeltaY = callbackData.mouseDeltaY;
 
         try {
             if (current_tensor) {

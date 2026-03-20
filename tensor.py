@@ -80,6 +80,8 @@ batch = next(iter(dataloader))
 batch = edict({k: v.to(device) if type(v) == torch.Tensor else v for k, v in batch.items()})
 fxfycxcy_t, c2w_t = batch.fxfycxcy[:1, 2:3], batch.c2w[:1, 2:3]
 images, fxfycxcy, c2w = batch.image[:1, :2], batch.fxfycxcy[:1, :2], batch.c2w[:1, :2]
+current_pos = (-c2w[0, 0, :3, :3].T @ c2w[0, 0, :3, 3:]).reshape(3, 1)
+
 
 # Renders a single frame given inputs and target poses
 @torch.no_grad()
@@ -143,16 +145,13 @@ def render_single_frame(model, imgs, fxfycxcy, c2w, fxfycxcy_t, c2w_t, config):
     return rendered  # (1, 1, 3, 256, 256)
 
 
-def compute_transform_matrix(controls, device):
+def compute_transform_matrix(controls, current_pos, device):
     controls = edict(controls)
     z, x, y = -controls.forward, -controls.right, controls.up
-    mX, mY = controls.mouseDeltaX, controls.mouseDeltaY
+    mX, mY = controls.angleX, controls.angleY
 
-    speed = 0.01
-    mouse_sensitivity = 0.0001
-
-    T = torch.eye(4, dtype=torch.float32, device=device)
-    T[:3, 3] = torch.tensor([x, y, z], device=device) * speed
+    speed = 0.05
+    mouse_sensitivity = 0.001
     
     theta = torch.pi * mY * mouse_sensitivity
     ct, st = math.cos(theta), math.sin(theta)
@@ -162,10 +161,18 @@ def compute_transform_matrix(controls, device):
     ct, st = math.cos(theta), math.sin(theta)
     RY = torch.tensor([[ct, 0, st], [0, 1, 0], [-st, 0, ct]], device=device)
     
-    R = RY @ RX
-    R = torch.concat([torch.concat([R, torch.tensor([[0, 0, 0]], device=device).T], dim=1), torch.tensor([[0, 0, 0, 1]], device=device)])
+    R = RX @ RY
+
+    current_pos = current_pos + R.T @ torch.tensor([[x, y, z]], device=device).T * speed
     
-    return T @ R
+    R = torch.concat([torch.concat([R, torch.tensor([[0, 0, 0]], device=device).T], dim=1), torch.tensor([[0, 0, 0, 1]], device=device)])
+    T = torch.eye(4, dtype=torch.float32, device=device)
+    T[:3, 3:] = current_pos
+    
+    T = (R @ T).inverse()
+    T = T.reshape(1, 1, *T.shape)
+    
+    return T, current_pos
 
 
 def get_tensor_info(tensor: torch.Tensor) -> dict:
@@ -222,9 +229,9 @@ def update(controls):
     global c2w
     global c2w_t
     global fxfycxcy_t
+    global current_pos
 
-    T = compute_transform_matrix(controls, device)
-    c2w_t = c2w_t @ T.inverse()
+    T, current_pos = compute_transform_matrix(controls, current_pos, device)
 
     with torch.no_grad(), torch.autocast(
         enabled=config.training.use_amp,
@@ -232,7 +239,7 @@ def update(controls):
         dtype=config.training.amp_dtype,
     ):
         result = render_single_frame(
-            model, images, fxfycxcy, c2w, fxfycxcy_t, c2w_t, config)
+            model, images, fxfycxcy, c2w, fxfycxcy_t, T, config)
 
     result = result[0, 0].float()
     tensor_info = get_tensor_info(result)
