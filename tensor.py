@@ -62,7 +62,7 @@ dataloader = DataLoader(
     prefetch_factor=config.training.prefetch_factor,
     num_workers=config.training.num_workers,
     persistent_workers=True,
-    shuffle=False,
+    shuffle=True,
     pin_memory=False,
     drop_last=True
 )
