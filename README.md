@@ -14,6 +14,8 @@ Clone this repo:
 git clone --recursive https://github.com/gammag4/pytorch_nvs_renderer
 ```
 
+Follow instructions to configure LVSM for inference from [here](https://github.com/gammag4/LVSM)
+
 Install required libraries:
 
 ```bash
