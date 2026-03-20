@@ -14,13 +14,14 @@
 #include <string>
 #include <vector>
 #include <stdexcept>
+#include <algorithm>
 
 namespace fs = std::filesystem;
 
-constexpr int WIDTH = 512;
-constexpr int HEIGHT = 512;
+constexpr int WIDTH = 256;
+constexpr int HEIGHT = 256;
 constexpr int CHANNELS = 3;
-constexpr double TARGET_FPS = 60.0;
+constexpr double TARGET_FPS = 30.0;
 
 const char* VERTEX_SHADER = R"(
     #version 330 core
@@ -95,37 +96,27 @@ void printCudaMemcpy3DParms(const cudaMemcpy3DParms& p) {
     std::cout << "-------------------------" << std::endl;
 }
 
-TensorInfo get_tensor_info(Controls controls) {
+TensorInfo update(Controls controls) {
     PyObject* tensor_module = PyImport_ImportModule("tensor");
     if (!tensor_module) {
         PyErr_Print();
         throw std::runtime_error("Failed to import tensor module");
     }
 
-    PyObject* get_tensor_func = PyObject_GetAttrString(tensor_module, "get_tensor");
-    if (!get_tensor_func || !PyCallable_Check(get_tensor_func)) {
+    PyObject* update_func = PyObject_GetAttrString(tensor_module, "update");
+    if (!update_func || !PyCallable_Check(update_func)) {
         PyErr_Print();
-        throw std::runtime_error("Failed to get get_tensor function");
+        throw std::runtime_error("Failed to get update function");
     }
 
     PyObject* args = PyTuple_Pack(1, controls.to_python_dict());
-    PyObject* tensor = PyObject_CallObject(get_tensor_func, args);
-    if (!tensor) {
-        PyErr_Print();
-        throw std::runtime_error("Failed to call get_tensor()");
-    }
-
-    PyObject* get_tensor_info_func = PyObject_GetAttrString(tensor_module, "get_tensor_info");
-    if (!get_tensor_info_func || !PyCallable_Check(get_tensor_info_func)) {
-        PyErr_Print();
-        throw std::runtime_error("Failed to get tensor_info function");
-    }
-
-    PyObject* info = PyObject_CallOneArg(get_tensor_info_func, tensor);
+    PyObject* info = PyObject_CallObject(update_func, args);
     if (!info) {
         PyErr_Print();
-        throw std::runtime_error("Failed to call tensor_info()");
+        throw std::runtime_error("Failed to call update()");
     }
+    Py_DECREF(update_func);
+    Py_DECREF(args);
 
     TensorInfo result;
 
@@ -173,9 +164,6 @@ TensorInfo get_tensor_info(Controls controls) {
     }
 
     Py_DECREF(info);
-    Py_DECREF(get_tensor_info_func);
-    Py_DECREF(tensor);
-    Py_DECREF(get_tensor_func);
     Py_DECREF(tensor_module);
 
     return result;
@@ -350,7 +338,7 @@ int main(int argc, char* argv[]) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT, "Tensor Renderer", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(800, 600, "Tensor Renderer", nullptr, nullptr);
     if (!window) {
         std::cerr << "Failed to create GLFW window" << std::endl;
         glfwTerminate();
@@ -361,12 +349,15 @@ int main(int argc, char* argv[]) {
 
     glewInit();
 
-    glViewport(0, 0, WIDTH, HEIGHT);
-    // auto setViewport = [](GLFWwindow* window, int width, int height) {
-    //     glViewport(0, 0, width, height);
-    // };
-    // glfwSetFramebufferSizeCallback(window, setViewport);
-    // glfwGetFramebufferSize(window, nullptr, nullptr);  // trigger callback
+    auto setViewport = [](GLFWwindow* window, int width, int height) {
+        int l = std::min(width, height);
+        int padX = (width - l) / 2, padY = (height - l) / 2;
+        glViewport(padX, padY, l, l);
+    };
+    glfwSetFramebufferSizeCallback(window, setViewport);
+    int width, height;
+    glfwGetFramebufferSize(window, &width, &height);
+    setViewport(window, width, height);
     glDisable(GL_DEPTH_TEST);
 
     GLuint shaderProgram = createShaderProgram();
@@ -409,7 +400,7 @@ int main(int argc, char* argv[]) {
         if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
             controls.right += 1.0;
         }
-        if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) {
+        if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) {
             controls.up -= 1.0;
         }
         if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
@@ -421,18 +412,21 @@ int main(int argc, char* argv[]) {
         glfwGetCursorPos(window, &mouseX, &mouseY);
         controls.mouseDeltaX = mouseX - lastMouseX;
         controls.mouseDeltaY = mouseY - lastMouseY;
-        lastMouseX = mouseX;
-        lastMouseY = mouseY;
 
         // Reset mouse position
-        glfwSetCursorPos(window, WIDTH / 2.0, HEIGHT / 2.0);
+        int width, height;
+        glfwGetFramebufferSize(window, &width, &height);
+        glfwSetCursorPos(window, width / 2.0, height / 2.0);
+        glfwGetCursorPos(window, &mouseX, &mouseY);
+        lastMouseX = mouseX;
+        lastMouseY = mouseY;
 
         try {
             if (current_tensor) {
                 Py_DECREF(current_tensor);
             }
 
-            TensorInfo info = get_tensor_info(controls);
+            TensorInfo info = update(controls);
             current_tensor = info.tensor;
             void* cuda_ptr = reinterpret_cast<void*>(info.pointer);
             texture.copyFromCudaPointer(cuda_ptr, info.row_bytes, info.rows);
