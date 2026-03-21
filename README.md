@@ -4,7 +4,7 @@ An OpenGL renderer for 3D Novel View Synthesis (NVS) PyTorch models that takes C
 
 It uses the Python.h API to integrate the Python code with the OpenGL C++ code.
 
-For now, it can render LVSM scenes.
+For now, it can render [LVSM](https://github.com/Haian-Jin/LVSM) scenes.
 
 Some examples:
 
@@ -43,15 +43,15 @@ Build and run:
 ```
 
 Controls are WASD for forward, left, backward, right, left ctrl/space for down/up and mouse for camera movement.
-Press ESC once to free the mouse and press twice to close.
+Press ESC once to unlock the mouse and press twice to close.
 
 ## Adding models
 
 Crate a script similar to render_lvsm.py that outputs:
 
 - `device (str)`: The CUDA device used for rendering
-- `initial_cam_state`: Tuple `(x, y, z, rotX, rotY)` With initial camera position and rotation in x and y axis
-- `render(T: torch.Tensor): torch.Tensor`: Function that receives a 4x4 camera transformation tensor and returns the view with shape `(3, h, w)` rendered by the model at that position
+- `initial_cam_state`: Tuple `(x, y, z, rotX, rotY)` with initial camera position and rotation in x and y axis
+- `render(T: torch.Tensor): torch.Tensor`: Function that receives a 4x4 camera transformation tensor and returns the view with shape `(3, h, w)` rendered by the model at that pose
 
 Then do the usual configuration, build and run:
 
