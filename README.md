@@ -6,6 +6,12 @@ It uses the Python.h API to integrate the Python code with the OpenGL C++ code.
 
 For now, it can render LVSM scenes.
 
+Some examples:
+
+https://github.com/user-attachments/assets/16de9309-e82a-4c30-a4e0-e8285eb4e954
+
+https://github.com/user-attachments/assets/7071a7dc-cba4-410b-ab48-004afeadcf46
+
 ## Usage
 
 Clone this repo:
