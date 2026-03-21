@@ -1,6 +1,6 @@
 # PyTorch NVS Renderer
 
-A renderer for PyTorch NVS models that takes CUDA tensors directly and renders them with OpenGL.
+An OpenGL renderer for 3D Novel View Synthesis (NVS) PyTorch models that takes CUDA tensors and renders them directly.
 
 It uses the Python.h API to integrate the Python code with the OpenGL C++ code.
 
