@@ -15,6 +15,8 @@
 #include <vector>
 #include <stdexcept>
 #include <algorithm>
+#include <fstream>
+#include <sstream>
 
 namespace fs = std::filesystem;
 
@@ -23,27 +25,6 @@ constexpr int WIDTH = 256;
 constexpr int HEIGHT = 256;
 constexpr int CHANNELS = 3;
 constexpr double TARGET_FPS = 30.0;
-
-const char* VERTEX_SHADER = R"(
-    #version 330 core
-    in vec2 aPosition;
-    in vec2 aTexCoord;
-    out vec2 vTexCoord;
-    void main() {
-        gl_Position = vec4(aPosition, 0.0, 1.0);
-        vTexCoord = aTexCoord;
-    }
-)";
-
-const char* FRAGMENT_SHADER = R"(
-    #version 330 core
-    in vec2 vTexCoord;
-    out vec4 FragColor;
-    uniform sampler2D uTexture;
-    void main() {
-        FragColor = texture(uTexture, vTexCoord);
-    }
-)";
 
 struct CallbackData {
     bool running = true;
@@ -256,13 +237,26 @@ public:
     }
 };
 
+std::string loadShader(const char* path) {
+    std::ifstream file(path);
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    return buffer.str();
+}
+
 GLuint createShaderProgram() {
+    // TODO remove hardcoded paths
+    std::string vertexSource = loadShader("shaders/vertex.glsl");
+    std::string fragmentSource = loadShader("shaders/fragment.glsl");
+    const char* vertexCstr = vertexSource.c_str();
+    const char* fragmentCstr = fragmentSource.c_str();
+
     GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &VERTEX_SHADER, nullptr);
+    glShaderSource(vertexShader, 1, &vertexCstr, nullptr);
     glCompileShader(vertexShader);
 
     GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &FRAGMENT_SHADER, nullptr);
+    glShaderSource(fragmentShader, 1, &fragmentCstr, nullptr);
     glCompileShader(fragmentShader);
 
     GLuint program = glCreateProgram();
