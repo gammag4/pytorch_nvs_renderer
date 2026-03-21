@@ -116,10 +116,13 @@ def render_single_frame(model, imgs, fxfycxcy, c2w, fxfycxcy_t, c2w_t, config):
     device = imgs.device
     h, w = imgs.shape[-2], imgs.shape[-1]
     patch_size = config.model.target_pose_tokenizer.patch_size
+    
+    mx, my = 1, 1
 
     # inputs
-    o, d = model.process_data.compute_rays(c2w, fxfycxcy, h, w, device)
-    posed_sources = model.get_posed_input(images=imgs, ray_o=o, ray_d=d)
+    o, d = model.process_data.compute_rays(c2w, fxfycxcy, h * mx, w * my, device)
+    o, d = [einops.rearrange(i, 'b n c (h p1) (w p2) -> (b p1 p2) n c h w', p1=mx, p2=my) for i in (o, d)]
+    posed_sources = model.get_posed_input(images=einops.repeat(imgs, 'b n c h w -> (b p) n c h w', p=mx * my), ray_o=o, ray_d=d)
     b, n_sources, c, h, w = posed_sources.shape
 
     source_tokens = model.image_tokenizer(posed_sources)
@@ -127,7 +130,8 @@ def render_single_frame(model, imgs, fxfycxcy, c2w, fxfycxcy_t, c2w_t, config):
     source_tokens = source_tokens.reshape(b, n_sources * n_patches, d)
 
     # targets
-    o_t, d_t = model.process_data.compute_rays(c2w_t, fxfycxcy_t, h, w, device)
+    o_t, d_t = model.process_data.compute_rays(c2w_t, fxfycxcy_t, h * mx, w * my, device)
+    o_t, d_t = [einops.rearrange(i, 'b n c (h p1) (w p2) -> (b p1 p2) n c h w', p1=mx, p2=my) for i in (o_t, d_t)]
     target_poses = model.get_posed_input(ray_o=o_t, ray_d=d_t)
     n_targets = target_poses.shape[-4]
 
@@ -135,25 +139,22 @@ def render_single_frame(model, imgs, fxfycxcy, c2w, fxfycxcy_t, c2w_t, config):
     target_tokens = target_tokens.reshape(b, n_targets, n_patches, d)
 
     # repeat source tokens for all targets (when rendering multiple targets at once)
-    source_tokens = einops.repeat(
-        source_tokens, 'b np d -> b v_target np d', v_target=n_targets)
+    source_tokens = einops.repeat(source_tokens, 'b np d -> b n_targets np d', n_targets=n_targets)
 
     # transformer
     concat_tokens = torch.cat((source_tokens, target_tokens), dim=-2)
     b, n_views, n_tokens, _ = concat_tokens.shape
     concat_tokens = concat_tokens.reshape(b, n_views * n_tokens, d)
     concat_tokens = model.transformer_input_layernorm(concat_tokens)
-    transformer_output = model.pass_layers(
-        concat_tokens, gradient_checkpoint=False)
+    transformer_output = model.pass_layers(concat_tokens, gradient_checkpoint=False)
     transformer_output = transformer_output.reshape(b, n_views, n_tokens, d)
 
     # decode
-    _, target_image_tokens = transformer_output.split(
-        [n_sources * n_patches, n_patches], dim=-2)
+    _, target_image_tokens = transformer_output.split([n_sources * n_patches, n_patches], dim=-2)
     rendered = model.image_token_decoder(target_image_tokens)
 
     rendered = einops.rearrange(
-        rendered, "b v (h_p w_p) (p1 p2 c) -> b v c (h_p p1) (w_p p2)",
+        rendered, "b n (h_p w_p) (p1 p2 c) -> b n c (h_p p1) (w_p p2)",
         # v=n_targets,
         h_p=h // patch_size,
         w_p=w // patch_size,
@@ -161,6 +162,8 @@ def render_single_frame(model, imgs, fxfycxcy, c2w, fxfycxcy_t, c2w_t, config):
         p2=patch_size,
         c=3
     )
+    rendered = einops.rearrange(rendered, '(b p1 p2) n c h w -> b n c (h p1) (w p2)', p1=mx, p2=my)
+    
     return rendered  # (1, 1, 3, 256, 256)
 
 

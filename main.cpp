@@ -21,8 +21,8 @@
 namespace fs = std::filesystem;
 
 // TODO allow custom sizes
-constexpr int WIDTH = 256;
-constexpr int HEIGHT = 256;
+constexpr int WIDTH = 256 * 1;
+constexpr int HEIGHT = 256 * 1;
 constexpr int CHANNELS = 3;
 constexpr double TARGET_FPS = 30.0;
 
