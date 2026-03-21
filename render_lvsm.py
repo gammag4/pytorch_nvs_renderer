@@ -1,12 +1,40 @@
-import sys
 import os
-import shlex
-
+import sys
 sys.path.append(os.path.abspath('LVSM'))
-os.chdir('LVSM')
+
+from importlib import import_module
+import shlex
+from pathlib import Path
+from easydict import EasyDict as edict
+import torch
+from torch.utils.data import DataLoader
+import einops
+from setup import init_config
+
+
+def is_valid_path(path):
+    try:
+        Path(path).resolve()
+        return True
+    except (OSError, RuntimeError):
+        return False
+
+
+def change_relative_paths(config, new_root):
+    for k in config.keys():
+        if type(config[k]) is str and config[k].startswith('./') and is_valid_path(config[k]):
+            config[k] = os.path.join(new_root, config[k])
+
+        if type(config[k]) in [dict, list, edict]:
+            config[k] = change_relative_paths(config[k], new_root)
+
+    return config
+
+
+# Init stuff
 
 args = '''
---config "configs/LVSM_scene_decoder_only.yaml"
+--config "./LVSM/configs/LVSM_scene_decoder_only.yaml"
 training.dataset_path = "./preprocessed_data/test/full_list.txt"
 training.batch_size_per_gpu = 1
 training.target_has_input =  false
@@ -16,22 +44,8 @@ training.num_input_views = 2
 training.num_target_views = 1
 inference.if_inference = true
 '''
-# sys.argv.pop()
+
 sys.argv.extend(shlex.split(args))
-sys.argv
-
-
-from importlib import import_module
-import os
-import math
-from easydict import EasyDict as edict
-import torch
-from torch.utils.data import DataLoader
-import einops
-from setup import init_config
-
-
-# Init stuff
 
 amp_dtypes = {
     "fp16": torch.float16,
@@ -40,6 +54,7 @@ amp_dtypes = {
     'tf32': torch.float32
 }
 config = init_config()
+config = change_relative_paths(config, './LVSM')
 config.training.amp_dtype = amp_dtypes[config.training.amp_dtype]
 
 torch.backends.cuda.matmul.allow_tf32 = config.training.use_tf32
@@ -80,7 +95,11 @@ batch = next(iter(dataloader))
 batch = edict({k: v.to(device) if type(v) == torch.Tensor else v for k, v in batch.items()})
 fxfycxcy_t, c2w_t = batch.fxfycxcy[:1, 2:3], batch.c2w[:1, 2:3]
 images, fxfycxcy, c2w = batch.image[:1, :2], batch.fxfycxcy[:1, :2], batch.c2w[:1, :2]
-current_pos = (-c2w[0, 0, :3, :3].T @ c2w[0, 0, :3, 3:]).reshape(3, 1)
+
+R = c2w_t[0, 0, :3, :3]
+x, y, z = (-R.T @ c2w_t[0, 0, :3, 3:]).squeeze().tolist()
+rotX, rotY = 0.0, 0.0 # TODO compute from R.T
+initial_cam_state = (x, y, z, rotX, rotY)
 
 
 # Renders a single frame given inputs and target poses
@@ -145,104 +164,22 @@ def render_single_frame(model, imgs, fxfycxcy, c2w, fxfycxcy_t, c2w_t, config):
     return rendered  # (1, 1, 3, 256, 256)
 
 
-def compute_transform_matrix(controls, current_pos, device):
-    controls = edict(controls)
-    z, x, y = -controls.forward, -controls.right, controls.up
-    mX, mY = controls.angleX, controls.angleY
-
-    speed = 0.05
-    mouse_sensitivity = 0.001
-    
-    theta = torch.pi * mY * mouse_sensitivity
-    ct, st = math.cos(theta), math.sin(theta)
-    RX = torch.tensor([[1, 0, 0], [0, ct, -st], [0, st, ct]], device=device)
-
-    theta = torch.pi * -mX * mouse_sensitivity
-    ct, st = math.cos(theta), math.sin(theta)
-    RY = torch.tensor([[ct, 0, st], [0, 1, 0], [-st, 0, ct]], device=device)
-    
-    R = RX @ RY
-
-    current_pos = current_pos + R.T @ torch.tensor([[x, y, z]], device=device).T * speed
-    
-    R = torch.concat([torch.concat([R, torch.tensor([[0, 0, 0]], device=device).T], dim=1), torch.tensor([[0, 0, 0, 1]], device=device)])
-    T = torch.eye(4, dtype=torch.float32, device=device)
-    T[:3, 3:] = current_pos
-    
-    T = (R @ T).inverse()
-    T = T.reshape(1, 1, *T.shape)
-    
-    return T, current_pos
-
-
-def get_tensor_info(tensor: torch.Tensor) -> dict:
-    """
-    Get metadata about a tensor for C++ side to know how to interpret it.
-    
-    Returns:
-        Dictionary with shape, dtype, and device pointer
-    """
-
-    if not tensor.is_cuda:
-        raise RuntimeError("Tensor must be on CUDA device")
-    
-    if tensor.dtype == torch.float32:
-        tensor = ((tensor * 0.5 + 0.5).clamp(0, 1) * 255).to(dtype=torch.uint8)
-
-    if tensor.shape[0] == 3 and len(tensor.shape) == 3:
-        tensor = tensor.permute(1, 2, 0)
-    
-    if tensor.shape[2] == 3:
-        ones = torch.ones((*tensor.shape[:2], 1), dtype=tensor.dtype, device=tensor.device) * 255
-        tensor = torch.cat([tensor, ones], dim=2)
-    
-    if not tensor.is_contiguous():
-        tensor = tensor.contiguous()
-    
-    h, w, c = tensor.shape
-    row_bytes = w * c * tensor.element_size()
-    rows = h
-
-    res = {
-        "tensor": tensor,
-        "pointer": tensor.data_ptr(),
-        "row_bytes": row_bytes,
-        "rows": rows,
-        "shape": list(tensor.shape),
-        "dtype": str(tensor.dtype),
-        "device_id": tensor.device.index or 0,
-    }
-    
-    return res
-
-
-def update(controls):
-    """
-    Returns a GPU tensor of shape (3, 512, 512) in CUDA memory.
-    This should not be changed bc it will be used later with images this shape.
-    Implement this with your actual tensor generation logic.
-    """
-    
-    global device
+def render(T):
     global images
     global fxfycxcy
     global c2w
-    global c2w_t
     global fxfycxcy_t
-    global current_pos
-
-    T, current_pos = compute_transform_matrix(controls, current_pos, device)
-
+    
     with torch.no_grad(), torch.autocast(
         enabled=config.training.use_amp,
         device_type="cuda",
         dtype=config.training.amp_dtype,
     ):
         result = render_single_frame(
-            model, images, fxfycxcy, c2w, fxfycxcy_t, T, config)
+            model,
+            images, fxfycxcy, c2w,
+            fxfycxcy_t, T,
+            config
+        )
 
-    result = result[0, 0].float()
-    tensor_info = get_tensor_info(result)
-
-    # + torch.randn(3, 512, 512, device='cuda', dtype=torch.float32) * 0.3
-    return tensor_info
+    return result[0, 0].float()

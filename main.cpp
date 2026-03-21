@@ -18,6 +18,7 @@
 
 namespace fs = std::filesystem;
 
+// TODO allow custom sizes
 constexpr int WIDTH = 256;
 constexpr int HEIGHT = 256;
 constexpr int CHANNELS = 3;
@@ -111,11 +112,11 @@ void printCudaMemcpy3DParms(const cudaMemcpy3DParms& p) {
     std::cout << "-------------------------" << std::endl;
 }
 
-TensorInfo update(Controls controls) {
-    PyObject* tensor_module = PyImport_ImportModule("tensor");
+TensorInfo update(Controls controls, std::string python_module_name) {
+    PyObject* tensor_module = PyImport_ImportModule(python_module_name.c_str());
     if (!tensor_module) {
         PyErr_Print();
-        throw std::runtime_error("Failed to import tensor module");
+        throw std::runtime_error("Failed to import \"" + python_module_name + "\" module");
     }
 
     PyObject* update_func = PyObject_GetAttrString(tensor_module, "update");
@@ -185,10 +186,10 @@ TensorInfo update(Controls controls) {
 }
 
 class GLTexture {
-public:
+private:
     GLuint texture_id = 0;
     cudaGraphicsResource* cuda_resource = nullptr;
-
+public:
     GLTexture() {
         glGenTextures(1, &texture_id);
         glBindTexture(GL_TEXTURE_2D, texture_id);
@@ -371,9 +372,23 @@ int main(int argc, char* argv[]) {
         Py_Initialize();
     }
 
-    std::string python_code_path;
+    // Set argc argv
+    std::vector<wchar_t*> wargv(argc);
+    for (int i = 0; i < argc; i++) {
+        wargv[i] = Py_DecodeLocale(argv[i], NULL);
+        if (wargv[i] == NULL) {
+            fprintf(stderr, "Erro fatal: não foi possível decodificar os argumentos da linha de comando\n");
+            return 1;
+        }
+    }
+    PySys_SetArgv(argc, wargv.data());
+
+    std::string python_module_path;
+    std::string python_module_name;
     try {
-        python_code_path = fs::path(std::string(argv[1])).parent_path().string();
+        fs::path path(argv[1]);
+        python_module_path = path.parent_path().string();
+        python_module_name = path.stem().string();
     }
     catch (const std::runtime_error& e) {
         std::cerr << "Failed to get python code path: " << e.what() << std::endl;
@@ -478,7 +493,7 @@ int main(int argc, char* argv[]) {
                 Py_DECREF(current_tensor);
             }
 
-            TensorInfo info = update(controls);
+            TensorInfo info = update(controls, python_module_name);
             current_tensor = info.tensor;
             void* cuda_ptr = reinterpret_cast<void*>(info.pointer);
             texture.copyFromCudaPointer(cuda_ptr, info.row_bytes, info.rows);

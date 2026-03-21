@@ -33,5 +33,19 @@ pip install torch torchvision --index-url https://download.pytorch.org/whl/cu130
 Build and run:
 
 ```bash
-./run.sh nvs_renderer ./tensor.py
+./run.sh ./render.py render_lvsm
+```
+
+## Adding models
+
+Crate a script similar to render_lvsm.py that outputs:
+
+- `device (str)`: The CUDA device used for rendering
+- `initial_cam_state`: Tuple `(x, y, z, rotX, rotY)` With initial camera position and rotation in x and y axis
+- `render(T: torch.Tensor): torch.Tensor`: Function that receives a 4x4 camera transformation tensor and returns the view with shape `(3, h, w)` rendered by the model at that position
+
+Then do the usual configuration, build and run:
+
+```bash
+./run.sh ./render.py <your_script_name>
 ```

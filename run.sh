@@ -2,12 +2,10 @@
 
 cwd=$(pwd)
 
-conda activate $1 \
-&& mkdir -p build && cd build \
+mkdir -p build && cd build \
 && cmake -DPython3_EXECUTABLE=$(which python) .. \
 && make \
 && cd .. \
-&& ./build/tensor_renderer $2 $3
+&& ./build/tensor_renderer $1 $2
 
 cd "$cwd"
-
