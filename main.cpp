@@ -380,7 +380,7 @@ int main(int argc, char* argv[]) {
         return -1;
     }
     PyObject* sysPath = PySys_GetObject("path");
-    PyObject* currentDir = PyUnicode_DecodeFSDefault(python_code_path.c_str());
+    PyObject* currentDir = PyUnicode_DecodeFSDefault(std::filesystem::absolute(python_module_path).c_str());
     PyList_Append(sysPath, currentDir);
     Py_DECREF(currentDir);
 
