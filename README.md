@@ -42,6 +42,9 @@ Build and run:
 ./run.sh ./render.py render_lvsm
 ```
 
+Controls are WASD for forward, left, backward, right, left ctrl/space for down/up and mouse for camera movement.
+Press ESC once to free the mouse and press twice to close.
+
 ## Adding models
 
 Crate a script similar to render_lvsm.py that outputs:
