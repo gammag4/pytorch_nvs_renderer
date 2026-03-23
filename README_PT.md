@@ -35,7 +35,7 @@ Crie o ambiente conda:
 ```bash
 conda create -n nvs_renderer python=3.13
 conda activate nvs_renderer
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu130
+pip install -r requirements.txt
 ```
 
 Faça a build e rode:
