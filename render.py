@@ -1,3 +1,4 @@
+import argparse
 import math
 from easydict import EasyDict as edict
 import torch
@@ -125,8 +126,8 @@ def get_controls(dt):
     return controls
 
 
-def render_model(initial_T, render, device, screen_res):
-    w, h = screen_res
+def render_model(initial_T, render, device, render_resolution, window_resolution=(800, 800)):
+    w, h = render_resolution
     
     R = initial_T[:3, :3]
     x, y, z = (-R.T @ initial_T[:3, 3:]).squeeze().tolist()
@@ -135,7 +136,7 @@ def render_model(initial_T, render, device, screen_res):
     
     # Setup pygame for keyboard input
     pygame.init()
-    screen = pygame.display.set_mode((w * 3, h * 3))
+    screen = pygame.display.set_mode(window_resolution)
     pygame.display.set_caption("NVS Renderer")
 
     pygame.mouse.set_visible(False)
@@ -168,7 +169,7 @@ def render_model(initial_T, render, device, screen_res):
         pygame.surfarray.blit_array(surface, canvas)
 
         # Render camera feed
-        screen.blit(pygame.transform.scale(surface, (w * 3, h * 3)), (0, 0))
+        screen.blit(pygame.transform.scale(surface, window_resolution), (0, 0))
         pygame.display.flip()
         
         profiler.step()
@@ -178,14 +179,30 @@ if __name__ == '__main__':
     from importlib import import_module
     import sys
 
-    module_name = sys.argv[1]  # 'render_lvsm'
-    module = import_module(module_name)
-    initial_T, render, device, screen_resolution = [getattr(module, n) for n in ['initial_T', 'render', 'device', 'screen_resolution']]
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--module", required=True)
+    args = parser.parse_args()
+
+    module = import_module(args.module) # 'render_lvsm'
+    (
+        initial_T,
+        render,
+        device,
+        render_resolution
+    ) = [getattr(module, n) for n in [
+        'initial_T',
+        'render',
+        'device',
+        'render_resolution'
+    ]]
+    
+    window_resolution = getattr(module, 'window_resolution', None)
 
     profiler.start(warmup=20)
     
     # T (4, 4), render(T) -> img (c, h, w), device, resolution
-    render_model(initial_T, render, device, screen_resolution)
+    render_model(initial_T, render, device, render_resolution, window_resolution or (800, 800))
     
     profiler.stop()
     profiler.print_results()

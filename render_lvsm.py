@@ -98,7 +98,7 @@ fxfycxcy_t, c2w_t = batch.fxfycxcy[:1, 2:3], batch.c2w[:1, 2:3]
 images, fxfycxcy, c2w = batch.image[:1, :2], batch.fxfycxcy[:1, :2], batch.c2w[:1, :2]
 
 initial_T = c2w_t[0, 0, :, :]
-screen_resolution = (256, 256)
+render_resolution = (256, 256)
 
 
 # Renders a single frame given inputs and target poses
