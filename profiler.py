@@ -71,8 +71,7 @@ def human_readable(value, unit):
         return f' {0.0:06.2f}{unit}'
 
     units = [
-        (1e15, 'P'), (1e12, 'T'), (1e9, 'G'), (1e6, 'M'), (1e3, 'k'),
-        (1, ''),
+        (1e15, 'P'), (1e12, 'T'), (1e9, 'G'), (1e6, 'M'), (1e3, 'k'), (1, ''),
         (1e-3, 'm'), (1e-6, 'µ'), (1e-9, 'n'), (1e-12, 'p'), (1e-15, 'f')
     ]
 
@@ -94,7 +93,7 @@ def get_results():
 
     results = _regions
     results = {k: torch.tensor(v)[:, 2] for k, v in results.items()}
-    results = {k: tuple(i.item() for i in (v.mean(), v.std(), v.max(), v.min())) for k, v in results.items()}
+    results = {k: tuple(i.item() for i in (v.mean(), v.std(), v.max(), v.min())) for k, v in results.items()} # TODO fix distribution
     results = {k: edict(mean=v[0], std=v[1], max=v[2], min=v[3]) for k, v in results.items()}
     return results
 
@@ -103,11 +102,8 @@ def print_results():
     results = get_results()
     max_len = max(len(i) for i in results.keys())
 
-    all_metrics = [m for v in results.values() for m in v.keys()]
-
     for k, v in results.items():
-        s = ', '.join(f'{k2}={human_readable(v2, 's')}' for k2,
-                      v2 in v.items())  # TODO fix format
+        s = ', '.join(f'{k2}={human_readable(v2, 's')}' for k2, v2 in v.items())  # TODO fix format
         sname = f'`{k}`:'
         print(f'{sname:<{max_len + 3}} {s}')
 
