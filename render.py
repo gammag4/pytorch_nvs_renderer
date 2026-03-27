@@ -3,6 +3,7 @@ import math
 from easydict import EasyDict as edict
 import torch
 import pygame
+import pygame_gui
 import profiler
 
 
@@ -91,7 +92,10 @@ def update(controls, current_state, render, device):
     return tensor_info, current_state
 
 
-def get_controls(dt):
+def get_controls(dt, is_navigating):
+    if not is_navigating:
+        return edict(right=0.0, up=0.0, forward=0.0, mouseDelta=(0.0, 0.0))
+
     speed = 1.0
     mouse_sensitivity = 0.001
     
@@ -128,6 +132,7 @@ def get_controls(dt):
 
 def render_model(initial_T, render, device, render_resolution, window_resolution=(800, 800)):
     w, h = render_resolution
+    win_w, win_h = window_resolution
     
     R = initial_T[:3, :3]
     x, y, z = (-R.T @ initial_T[:3, 3:]).squeeze().tolist()
@@ -137,12 +142,26 @@ def render_model(initial_T, render, device, render_resolution, window_resolution
     # Setup pygame for keyboard input
     pygame.init()
     screen = pygame.display.set_mode(window_resolution)
+    manager = pygame_gui.UIManager(window_resolution)
     pygame.display.set_caption("NVS Renderer")
+    
+    is_navigating = True
 
     pygame.mouse.set_visible(False)
     pygame.event.set_grab(True)
 
     surface = pygame.Surface((w, h))
+    
+    time_slider = pygame_gui.elements.UIHorizontalSlider(
+        relative_rect=pygame.Rect((0, -50), (win_w / 2, 30)),
+        start_value=50.0,
+        value_range=(0.0, 100.0),
+        manager=manager,
+        anchors={
+            'centerx': 'centerx',
+            'bottom': 'bottom'
+        }
+    )
     
     # Control loopimport asyncio
     clock = pygame.time.Clock()
@@ -155,21 +174,55 @@ def render_model(initial_T, render, device, render_resolution, window_resolution
             if event.type == pygame.QUIT:
                 pygame.quit()
                 return
-        if pygame.key.get_pressed()[pygame.K_ESCAPE]:
-            pygame.quit()
-            return
-        
+
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    if not is_navigating:
+                        pygame.quit()
+                        return
+                    
+                    is_navigating = False
+                    pygame.mouse.set_visible(True)
+                    pygame.event.set_grab(False)
+
+            consumed = False
+
+            if not is_navigating:
+                # Time slider
+                if event.type == pygame_gui.UI_HORIZONTAL_SLIDER_MOVED:
+                    if event.ui_element == time_slider:
+                        print(f"Current Value: {event.value}") # TODO
+                
+                consumed = manager.process_events(event)
+
+            # Check click on screen
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1: # left mouse
+                    if not consumed:
+                        is_navigating = True
+                        pygame.mouse.set_visible(False)
+                        pygame.event.set_grab(True)
+                        
+                        # discards current mouse delta to prevent mouse drift when switching back
+                        _ = pygame.mouse.get_rel()
+
+        manager.update(dt)
+    
         with profiler.RegionProfiler('create_tensor_from_controls'):
-            controls = get_controls(dt)
-            tensor_info, current_state = update(
-                controls, current_state, render, device)
+            controls = get_controls(dt, is_navigating)
+            tensor_info, current_state = update(controls, current_state, render, device)
 
         with profiler.RegionProfiler('get_tensor_result'):
             canvas = tensor_info.tensor.permute(1, 0, 2)[:, :, :3].cpu().numpy()
+        
         pygame.surfarray.blit_array(surface, canvas)
 
         # Render camera feed
         screen.blit(pygame.transform.scale(surface, window_resolution), (0, 0))
+
+        if not is_navigating:
+            manager.draw_ui(screen)
+        
         pygame.display.flip()
         
         profiler.step()
