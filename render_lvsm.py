@@ -10,6 +10,7 @@ import torch
 from torch.utils.data import DataLoader
 import einops
 from setup import init_config
+import torchvision.transforms.functional as TF
 
 
 def is_valid_path(path):
@@ -105,6 +106,8 @@ n_frames = batch.image.shape[0]
 # Renders a single frame given inputs and target poses
 @torch.no_grad()
 def render_single_frame(model, imgs, fxfycxcy, c2w, fxfycxcy_t, c2w_t, config):
+    global render_resolution
+    
     # imgs: (1, 2, 3, 256, 256)
     # fxfycxcy: (1, 2, 4)
     # c2w: (1, 2, 4, 4)
@@ -113,17 +116,22 @@ def render_single_frame(model, imgs, fxfycxcy, c2w, fxfycxcy_t, c2w_t, config):
 
     # assert c2w_t[-3] == fxfycxcy_t[-2] == 1, 'should only generate one target for each view'
 
+    imgs = TF.resize(imgs, size=render_resolution[0])
+    
     device = imgs.device
     h, w = imgs.shape[-2], imgs.shape[-1]
     patch_size = config.model.target_pose_tokenizer.patch_size
+    
+    imgs = TF.center_crop(imgs, output_size=render_resolution)
     
     mx, my = 1, 1
 
     # inputs
     o, d = model.process_data.compute_rays(c2w, fxfycxcy, h * mx, w * my, device)
+    o, d = [TF.center_crop(i, output_size=render_resolution) for i in (o, d)]
     o, d = [einops.rearrange(i, 'b n c (h p1) (w p2) -> (b p1 p2) n c h w', p1=mx, p2=my) for i in (o, d)]
     posed_sources = model.get_posed_input(images=einops.repeat(imgs, 'b n c h w -> (b p) n c h w', p=mx * my), ray_o=o, ray_d=d)
-    b, n_sources, c, h, w = posed_sources.shape
+    b, n_sources, c, _, _ = posed_sources.shape
 
     source_tokens = model.image_tokenizer(posed_sources)
     _, n_patches, d = source_tokens.shape
@@ -131,6 +139,7 @@ def render_single_frame(model, imgs, fxfycxcy, c2w, fxfycxcy_t, c2w_t, config):
 
     # targets
     o_t, d_t = model.process_data.compute_rays(c2w_t, fxfycxcy_t, h * mx, w * my, device)
+    o_t, d_t = [TF.center_crop(i, output_size=render_resolution) for i in (o_t, d_t)]
     o_t, d_t = [einops.rearrange(i, 'b n c (h p1) (w p2) -> (b p1 p2) n c h w', p1=mx, p2=my) for i in (o_t, d_t)]
     target_poses = model.get_posed_input(ray_o=o_t, ray_d=d_t)
     n_targets = target_poses.shape[-4]
@@ -156,8 +165,8 @@ def render_single_frame(model, imgs, fxfycxcy, c2w, fxfycxcy_t, c2w_t, config):
     rendered = einops.rearrange(
         rendered, "b n (h_p w_p) (p1 p2 c) -> b n c (h_p p1) (w_p p2)",
         # v=n_targets,
-        h_p=h // patch_size,
-        w_p=w // patch_size,
+        h_p=render_resolution[0] // patch_size,
+        w_p=render_resolution[1] // patch_size,
         p1=patch_size,
         p2=patch_size,
         c=3
