@@ -79,7 +79,7 @@ def get_tensor_info(tensor: torch.Tensor) -> dict:
     return res
 
 
-def update(controls, current_state, render, device):
+def update(frame_index, controls, current_state, render, device):
     """
     Returns a GPU tensor of shape (3, 512, 512) in CUDA memory.
     This should not be changed bc it will be used later with images this shape.
@@ -87,7 +87,7 @@ def update(controls, current_state, render, device):
     """
     
     T, current_state = compute_transform_matrix(controls, current_state, device)
-    result = render(T)
+    result = render(T, frame_index)
     tensor_info = get_tensor_info(result)
     return tensor_info, current_state
 
@@ -130,7 +130,7 @@ def get_controls(dt, is_navigating):
     return controls
 
 
-def render_model(initial_T, render, device, render_resolution, window_resolution=(800, 800)):
+def render_model(n_frames, initial_T, render, device, render_resolution, window_resolution=(800, 800)):
     w, h = render_resolution
     win_w, win_h = window_resolution
     
@@ -151,17 +151,20 @@ def render_model(initial_T, render, device, render_resolution, window_resolution
     pygame.event.set_grab(True)
 
     surface = pygame.Surface((w, h))
-    
+
+    frame_index = 0
     time_slider = pygame_gui.elements.UIHorizontalSlider(
         relative_rect=pygame.Rect((0, -50), (win_w / 2, 30)),
-        start_value=50.0,
-        value_range=(0.0, 100.0),
+        start_value=0,
+        value_range=(0, 1 if n_frames == 1 else n_frames - 1),
         manager=manager,
         anchors={
             'centerx': 'centerx',
             'bottom': 'bottom'
         }
     )
+    if n_frames == 1:
+        time_slider.hide()
     
     # Control loopimport asyncio
     clock = pygame.time.Clock()
@@ -191,7 +194,7 @@ def render_model(initial_T, render, device, render_resolution, window_resolution
                 # Time slider
                 if event.type == pygame_gui.UI_HORIZONTAL_SLIDER_MOVED:
                     if event.ui_element == time_slider:
-                        print(f"Current Value: {event.value}") # TODO
+                        frame_index = int(event.value)
                 
                 consumed = manager.process_events(event)
 
@@ -210,7 +213,7 @@ def render_model(initial_T, render, device, render_resolution, window_resolution
     
         with profiler.RegionProfiler('create_tensor_from_controls'):
             controls = get_controls(dt, is_navigating)
-            tensor_info, current_state = update(controls, current_state, render, device)
+            tensor_info, current_state = update(frame_index, controls, current_state, render, device)
 
         with profiler.RegionProfiler('get_tensor_result'):
             canvas = tensor_info.tensor.permute(1, 0, 2)[:, :, :3].cpu().numpy()
@@ -239,11 +242,13 @@ if __name__ == '__main__':
 
     module = import_module(args.module) # 'render_lvsm'
     (
+        n_frames,
         initial_T,
         render,
         device,
         render_resolution
     ) = [getattr(module, n) for n in [
+        'n_frames',
         'initial_T',
         'render',
         'device',
@@ -255,7 +260,7 @@ if __name__ == '__main__':
     profiler.start(warmup=20)
     
     # T (4, 4), render(T) -> img (c, h, w), device, resolution
-    render_model(initial_T, render, device, render_resolution, window_resolution or (800, 800))
+    render_model(n_frames, initial_T, render, device, render_resolution, window_resolution or (800, 800))
     
     profiler.stop()
     profiler.print_results()

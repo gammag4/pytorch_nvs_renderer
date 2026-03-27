@@ -36,7 +36,7 @@ def change_relative_paths(config, new_root):
 args = '''
 --config "./LVSM/configs/LVSM_scene_decoder_only.yaml"
 training.dataset_path = "./preprocessed_data/test/full_list.txt"
-training.batch_size_per_gpu = 1
+training.batch_size_per_gpu = 16
 training.target_has_input =  false
 training.num_views = 3
 training.square_crop = true
@@ -99,6 +99,7 @@ images, fxfycxcy, c2w = batch.image[:1, :2], batch.fxfycxcy[:1, :2], batch.c2w[:
 
 initial_T = c2w_t[0, 0, :, :]
 render_resolution = (256, 256)
+n_frames = batch.image.shape[0]
 
 
 # Renders a single frame given inputs and target poses
@@ -166,11 +167,12 @@ def render_single_frame(model, imgs, fxfycxcy, c2w, fxfycxcy_t, c2w_t, config):
     return rendered  # (1, 1, 3, 256, 256)
 
 
-def render(T):
+def render(T, frame_index): # TODO
     global images
     global fxfycxcy
     global c2w
     global fxfycxcy_t
+    global batch
     
     with torch.no_grad(), torch.autocast(
         enabled=config.training.use_amp,
@@ -179,7 +181,7 @@ def render(T):
     ):
         result = render_single_frame(
             model,
-            images, fxfycxcy, c2w,
+            batch.image[frame_index:frame_index+1, :2], batch.fxfycxcy[frame_index:frame_index+1, :2], batch.c2w[frame_index:frame_index+1, :2],
             fxfycxcy_t, T,
             config
         )

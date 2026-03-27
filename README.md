@@ -57,13 +57,14 @@ Press ESC once to unlock the mouse and press twice to close.
 To render using a custom model, import and use the function `render_model` with the following format:
 
 ```py
-render_model(initial_T, render, device, render_resolution, window_resolution=(800, 800))
+render_model(n_frames, initial_T, render, device, render_resolution, window_resolution=(800, 800))
 ```
 
 Where:
 
-- `initial_T: tensor`: Initial camera transformation matrix
-- `render(T) -> I`: A function that receives the current camera transformation matrix and returns the rendered image (shape `(C=3, H, W)`) at that position
+- `n_frames: int`: Number of frames in the scene (should be 1 in the case of static NVS)
+- `initial_T: tensor`: Initial 4x4 camera transformation matrix
+- `render(T: tensor, frame_index: int) -> I: tensor`: A function that receives the current 4x4 camera transformation matrix and current frame index (which will be always zero in static NVS) and returns the rendered image (shape `(C=3, H, W)`) at that position
 - `device: str`: Which device to use (currently only works with `cuda`)
 - `render_resolution: (int, int)`: Which resolution to use for rendering images (should be the same as the shape of `render(T)` output)
 - `window_resolution: (int, int)`: (optional) Which resolution to use for the window
