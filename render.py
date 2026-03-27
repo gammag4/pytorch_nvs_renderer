@@ -146,6 +146,7 @@ def render_model(n_frames, initial_T, render, device, render_resolution, window_
     pygame.display.set_caption("NVS Renderer")
     
     is_navigating = True
+    is_playing = False
 
     pygame.mouse.set_visible(False)
     pygame.event.set_grab(True)
@@ -163,8 +164,18 @@ def render_model(n_frames, initial_T, render, device, render_resolution, window_
             'bottom': 'bottom'
         }
     )
+    play_button = pygame_gui.elements.UIButton(
+        relative_rect=pygame.Rect((20, -50), (100, 30)), # Position and size (x, y), (width, height)
+        text='Play',
+        manager=manager,
+        anchors={
+            'left': 'left',
+            'bottom': 'bottom'
+        }
+    )
     if n_frames == 1:
         time_slider.hide()
+        play_button.hide()
     
     # Control loopimport asyncio
     clock = pygame.time.Clock()
@@ -196,6 +207,12 @@ def render_model(n_frames, initial_T, render, device, render_resolution, window_
                     if event.ui_element == time_slider:
                         frame_index = int(event.value)
                 
+                # Play button
+                if event.type == pygame_gui.UI_BUTTON_PRESSED:
+                    if event.ui_element == play_button:
+                        is_playing = not is_playing
+                        play_button.set_text('Pause' if is_playing else 'Play')
+                
                 consumed = manager.process_events(event)
 
             # Check click on screen
@@ -208,6 +225,10 @@ def render_model(n_frames, initial_T, render, device, render_resolution, window_
                         
                         # discards current mouse delta to prevent mouse drift when switching back
                         _ = pygame.mouse.get_rel()
+        
+        if is_playing:
+            frame_index = (frame_index + 1) % n_frames
+            time_slider.set_current_value(frame_index)
 
         manager.update(dt)
     
