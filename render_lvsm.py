@@ -167,12 +167,15 @@ def render_single_frame(model, imgs, fxfycxcy, c2w, fxfycxcy_t, c2w_t, config):
     return rendered  # (1, 1, 3, 256, 256)
 
 
-def render(T, frame_index): # TODO
+def render(T, frame_index):
     global images
     global fxfycxcy
     global c2w
     global fxfycxcy_t
     global batch
+    
+    # TODO
+    images, fxfycxcy, c2w = batch.image[frame_index:frame_index+1, :2], batch.fxfycxcy[frame_index:frame_index+1, :2], batch.c2w[frame_index:frame_index+1, :2],
     
     with torch.no_grad(), torch.autocast(
         enabled=config.training.use_amp,
@@ -181,7 +184,7 @@ def render(T, frame_index): # TODO
     ):
         result = render_single_frame(
             model,
-            batch.image[frame_index:frame_index+1, :2], batch.fxfycxcy[frame_index:frame_index+1, :2], batch.c2w[frame_index:frame_index+1, :2],
+            images, fxfycxcy, c2w,
             fxfycxcy_t, T,
             config
         )
