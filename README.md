@@ -41,7 +41,7 @@ pip install -r requirements.txt
 Build and run:
 
 ```bash
-./run.sh ./render.py render_lvsm
+python render.py render_lvsm
 ```
 
 Controls are WASD for forward, left, backward, right, left ctrl/space for down/up and mouse for camera movement.
@@ -58,5 +58,5 @@ Crate a script similar to render_lvsm.py that outputs:
 Then do the usual configuration, build and run:
 
 ```bash
-./run.sh ./render.py <your_script_name>
+python render.py <your_script_name>
 ```

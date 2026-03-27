@@ -45,6 +45,7 @@ training.num_target_views = 1
 inference.if_inference = true
 '''
 
+sys.argv = ['']
 sys.argv.extend(shlex.split(args))
 
 amp_dtypes = {
@@ -96,10 +97,7 @@ batch = edict({k: v.to(device) if type(v) == torch.Tensor else v for k, v in bat
 fxfycxcy_t, c2w_t = batch.fxfycxcy[:1, 2:3], batch.c2w[:1, 2:3]
 images, fxfycxcy, c2w = batch.image[:1, :2], batch.fxfycxcy[:1, :2], batch.c2w[:1, :2]
 
-R = c2w_t[0, 0, :3, :3]
-x, y, z = (-R.T @ c2w_t[0, 0, :3, 3:]).squeeze().tolist()
-rotX, rotY = 0.0, 0.0 # TODO compute from R.T
-initial_cam_state = (x, y, z, rotX, rotY)
+initial_T = c2w_t[0, 0, :, :]
 
 
 # Renders a single frame given inputs and target poses
