@@ -180,12 +180,12 @@ if __name__ == '__main__':
 
     module_name = sys.argv[1]  # 'render_lvsm'
     module = import_module(module_name)
-    initial_T, render, device = [getattr(module, n) for n in ['initial_T', 'render', 'device']]
-
-    w, h = (256, 256)
+    initial_T, render, device, screen_resolution = [getattr(module, n) for n in ['initial_T', 'render', 'device', 'screen_resolution']]
 
     profiler.start(warmup=20)
-    # T (4, 4), render(T) -> img (c, h, w), device
-    render_model(initial_T, render, device, (w, h))
+    
+    # T (4, 4), render(T) -> img (c, h, w), device, resolution
+    render_model(initial_T, render, device, screen_resolution)
+    
     profiler.stop()
     profiler.print_results()
