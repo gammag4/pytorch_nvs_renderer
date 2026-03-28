@@ -66,6 +66,29 @@ class RegionProfiler:
         return True
 
 
+class Profiler:
+    def __init__(self, *, should_profile=True, warmup=0):
+        self.should_profile = should_profile
+        self.warmup = warmup
+
+    def __enter__(self):
+        if self.should_profile:
+            start(warmup=self.warmup)
+
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if self.should_profile:
+            stop()
+
+        if exc_type is not None:
+            return False
+        return True
+
+    def step(self):
+        step()
+
+
 def human_readable(value, unit):
     if value == 0:
         return f' {0.0:06.2f}{unit}'
@@ -101,6 +124,12 @@ def get_results():
 def print_results():
     results = get_results()
     max_len = max(len(i) for i in results.keys())
+    
+    print('Profiling results:')
+
+    if not results:
+        print('No profiling was conducted')
+        return
 
     for k, v in results.items():
         s = ', '.join(f'{k2}={human_readable(v2, 's')}' for k2, v2 in v.items())  # TODO fix format
@@ -109,7 +138,7 @@ def print_results():
 
 
 # Three cols: start, end, interval
-def dump(fpath='profiler_dump.pt'):
+def dump(fpath):
     global _regions
 
     results = _regions

@@ -180,74 +180,75 @@ def render_model(n_frames, initial_T, render, device, render_resolution, window_
     # Control loopimport asyncio
     clock = pygame.time.Clock()
     while True:
-        dt = clock.tick() / 1000.0
-        # print(f'fps: {clock.get_fps()}')
-        
-        # Handle events
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                return
+        with profiler.RegionProfiler('main_loop'):
+            dt = clock.tick() / 1000.0
+            # print(f'fps: {clock.get_fps()}')
+            
+            # Handle events
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    return
 
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    if not is_navigating:
-                        pygame.quit()
-                        return
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        if not is_navigating:
+                            pygame.quit()
+                            return
+                        
+                        is_navigating = False
+                        pygame.mouse.set_visible(True)
+                        pygame.event.set_grab(False)
+
+                consumed = False
+
+                if not is_navigating:
+                    # Time slider
+                    if event.type == pygame_gui.UI_HORIZONTAL_SLIDER_MOVED:
+                        if event.ui_element == time_slider:
+                            frame_index = int(event.value)
                     
-                    is_navigating = False
-                    pygame.mouse.set_visible(True)
-                    pygame.event.set_grab(False)
+                    # Play button
+                    if event.type == pygame_gui.UI_BUTTON_PRESSED:
+                        if event.ui_element == play_button:
+                            is_playing = not is_playing
+                            play_button.set_text('Pause' if is_playing else 'Play')
+                    
+                    consumed = manager.process_events(event)
 
-            consumed = False
+                # Check click on screen
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button == 1: # left mouse
+                        if not consumed:
+                            is_navigating = True
+                            pygame.mouse.set_visible(False)
+                            pygame.event.set_grab(True)
+                            
+                            # discards current mouse delta to prevent mouse drift when switching back
+                            _ = pygame.mouse.get_rel()
+            
+            if is_playing:
+                frame_index = (frame_index + 1) % n_frames
+                time_slider.set_current_value(frame_index)
+
+            manager.update(dt)
+        
+            with profiler.RegionProfiler('create_tensor_from_controls'):
+                controls = get_controls(dt, is_navigating)
+                tensor_info, current_state = update(frame_index, controls, current_state, render, device)
+
+            with profiler.RegionProfiler('get_tensor_result'):
+                canvas = tensor_info.tensor.permute(1, 0, 2)[:, :, :3].cpu().numpy()
+            
+            pygame.surfarray.blit_array(surface, canvas)
+
+            # Render camera feed
+            screen.blit(pygame.transform.scale(surface, window_resolution), (0, 0))
 
             if not is_navigating:
-                # Time slider
-                if event.type == pygame_gui.UI_HORIZONTAL_SLIDER_MOVED:
-                    if event.ui_element == time_slider:
-                        frame_index = int(event.value)
-                
-                # Play button
-                if event.type == pygame_gui.UI_BUTTON_PRESSED:
-                    if event.ui_element == play_button:
-                        is_playing = not is_playing
-                        play_button.set_text('Pause' if is_playing else 'Play')
-                
-                consumed = manager.process_events(event)
-
-            # Check click on screen
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1: # left mouse
-                    if not consumed:
-                        is_navigating = True
-                        pygame.mouse.set_visible(False)
-                        pygame.event.set_grab(True)
-                        
-                        # discards current mouse delta to prevent mouse drift when switching back
-                        _ = pygame.mouse.get_rel()
-        
-        if is_playing:
-            frame_index = (frame_index + 1) % n_frames
-            time_slider.set_current_value(frame_index)
-
-        manager.update(dt)
-    
-        with profiler.RegionProfiler('create_tensor_from_controls'):
-            controls = get_controls(dt, is_navigating)
-            tensor_info, current_state = update(frame_index, controls, current_state, render, device)
-
-        with profiler.RegionProfiler('get_tensor_result'):
-            canvas = tensor_info.tensor.permute(1, 0, 2)[:, :, :3].cpu().numpy()
-        
-        pygame.surfarray.blit_array(surface, canvas)
-
-        # Render camera feed
-        screen.blit(pygame.transform.scale(surface, window_resolution), (0, 0))
-
-        if not is_navigating:
-            manager.draw_ui(screen)
-        
-        pygame.display.flip()
+                manager.draw_ui(screen)
+            
+            pygame.display.flip()
         
         profiler.step()
 
@@ -278,10 +279,9 @@ if __name__ == '__main__':
     
     window_resolution = getattr(module, 'window_resolution', None)
 
-    profiler.start(warmup=20)
+    with profiler.Profiler(should_profile=True, warmup=20):
+        # T (4, 4), render(T) -> img (c, h, w), device, resolution
+        render_model(n_frames, initial_T, render, device, render_resolution, window_resolution or (800, 800))
     
-    # T (4, 4), render(T) -> img (c, h, w), device, resolution
-    render_model(n_frames, initial_T, render, device, render_resolution, window_resolution or (800, 800))
-    
-    profiler.stop()
     profiler.print_results()
+    # profiler.dump('profiler_dump.pt')
