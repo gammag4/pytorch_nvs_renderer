@@ -7,6 +7,7 @@ import shlex
 from pathlib import Path
 from easydict import EasyDict as edict
 import torch
+import torch_tensorrt
 from torch.utils.data import DataLoader
 import einops
 from setup import init_config
@@ -90,6 +91,7 @@ module, lvsm = config.model.class_name.rsplit(".", 1)
 model = getattr(import_module(module), lvsm)(config).to(device)
 model.load_ckpt(config.training.checkpoint_dir)
 model.eval()
+# model = torch.compile(model, backend='tensorrt')
 
 # Get specific scene to render
 
