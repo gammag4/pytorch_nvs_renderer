@@ -79,17 +79,17 @@ def get_tensor_info(tensor: torch.Tensor) -> dict:
     return res
 
 
-def update(frame_index, controls, current_state, render, device):
+def render_func(frame_index, render, T):
     """
     Returns a GPU tensor of shape (3, 512, 512) in CUDA memory.
     This should not be changed bc it will be used later with images this shape.
     Implement this with your actual tensor generation logic.
     """
+
+    res = render(T, frame_index)
+    res = get_tensor_info(res)
     
-    T, current_state = compute_transform_matrix(controls, current_state, device)
-    result = render(T, frame_index)
-    tensor_info = get_tensor_info(result)
-    return tensor_info, current_state
+    return res
 
 
 def get_controls(dt, is_navigating):
@@ -182,7 +182,7 @@ def render_model(n_frames, initial_T, render, device, render_resolution, window_
     while True:
         with profiler.RegionProfiler('main_loop'):
             dt = clock.tick() / 1000.0
-            # print(f'fps: {clock.get_fps()}')
+            print(f'fps: {clock.get_fps()}')
             
             # Handle events
             for event in pygame.event.get():
@@ -232,19 +232,16 @@ def render_model(n_frames, initial_T, render, device, render_resolution, window_
                 time_slider.set_current_value(frame_index)
 
             manager.update(dt)
-        
-            with profiler.RegionProfiler('create_tensor_from_controls'):
-                controls = get_controls(dt, is_navigating)
-                tensor_info, current_state = update(frame_index, controls, current_state, render, device)
-
-            with profiler.RegionProfiler('get_tensor_result'):
-                canvas = tensor_info.tensor.permute(1, 0, 2)[:, :, :3].cpu().numpy()
+            
+            controls = get_controls(dt, is_navigating)
+            T, current_state = compute_transform_matrix(controls, current_state, device)
+            canvas = render_func(frame_index, render, T).tensor.permute(1, 0, 2)[:, :, :3].cpu().numpy()
             
             pygame.surfarray.blit_array(surface, canvas)
 
             # Render camera feed
             screen.blit(pygame.transform.scale(surface, window_resolution), (0, 0))
-
+            
             if not is_navigating:
                 manager.draw_ui(screen)
             
@@ -278,7 +275,7 @@ if __name__ == '__main__':
     ]]
     
     window_resolution = getattr(module, 'window_resolution', None)
-
+    
     with profiler.Profiler(should_profile=True, warmup=20):
         # T (4, 4), render(T) -> img (c, h, w), device, resolution
         render_model(n_frames, initial_T, render, device, render_resolution, window_resolution or (800, 800))
