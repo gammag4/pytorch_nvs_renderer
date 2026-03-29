@@ -38,6 +38,7 @@ Create conda environment:
 ```bash
 conda create -n nvs_renderer python=3.13
 conda activate nvs_renderer
+conda install -c conda-forge ffmpeg
 pip install -r requirements.txt
 ```
 
@@ -65,7 +66,7 @@ Where:
 - `n_frames: int`: Number of frames in the scene (should be 1 in the case of static NVS)
 - `initial_T: tensor`: Initial 4x4 camera transformation matrix
 - `render(T: tensor, frame_index: int) -> I: tensor`: A function that receives the current 4x4 camera transformation matrix and current frame index (which will be always zero in static NVS) and returns the rendered image (shape `(C=3, H, W)`) at that position
-- `device: str`: Which device to use (currently only works with `cuda`)
+- `device: str`: Which device to use (should be a CUDA device)
 - `render_resolution: (int, int)`: Which resolution to use for rendering images (should be the same as the shape of `render(T)` output)
 - `window_resolution: (int, int)`: (optional) Which resolution to use for the window
 
