@@ -10,8 +10,11 @@ import torch
 import torch_tensorrt
 from torch.utils.data import DataLoader
 import einops
-from setup import init_config
 import torchvision.transforms.functional as TF
+from torchcodec.decoders import VideoDecoder
+import numpy as np
+from setup import init_config
+import profiler
 
 
 def is_valid_path(path):
@@ -102,7 +105,27 @@ images, fxfycxcy, c2w = batch.image[:1, :2], batch.fxfycxcy[:1, :2], batch.c2w[:
 
 initial_T = c2w_t[0, 0, :, :]
 render_resolution = (256, 256)
-n_frames = batch.image.shape[0]
+n_frames = 1 #batch.image.shape[0] # TODO
+
+
+# dynamic NVS
+
+# plenoptic_path = 'LVSM/preprocessed_data/plenoptic/coffee_martini'
+# cameras = [VideoDecoder(os.path.join(plenoptic_path, c)) for c in ('cam04.mp4', 'cam08.mp4')]
+# poses = torch.tensor(np.load(os.path.join(plenoptic_path, 'poses_bounds.npy')), device=device)
+# poses = poses[[3, 7], :15].reshape(-1, 3, 5)
+# T = torch.concat([poses[:, :, :4], torch.tensor([[[0, 0, 0, 1]]], device=device).repeat(poses.shape[0], 1, 1)], dim=-2).unsqueeze(0).float()
+# fxfycxcy = torch.stack([poses[:, 1, 4], poses[:, 0, 4], poses[:, 2, 4], poses[:, 2, 4]], dim=-1).unsqueeze(0).float()
+
+# fxfycxcy_t = fxfycxcy[:, :1]
+# T = T # TODO
+# T2 = torch.eye(4).repeat((*T.shape[:-2], 1, 1))
+# T2[:, :, 0, 3:] = -T[:, :, 1, 3:]
+# T2[:, :, 1, 3:] = -T[:, :, 0, 3:]
+# T2[:, :, 2, 3:] = -T[:, :, 2, 3:]
+# c2w = T
+# initial_T = T[0, 0]
+# n_frames = min([len(c) for c in cameras])
 
 
 # Renders a single frame given inputs and target poses
@@ -118,7 +141,8 @@ def render_single_frame(model, imgs, fxfycxcy, c2w, fxfycxcy_t, c2w_t, config):
 
     # assert c2w_t[-3] == fxfycxcy_t[-2] == 1, 'should only generate one target for each view'
 
-    imgs = TF.resize(imgs, size=render_resolution[0])
+    b = imgs.shape[0]
+    imgs = einops.rearrange(TF.resize(einops.rearrange(imgs, 'b n c h w -> (b n) c h w'), size=render_resolution[0]), '(b n) c h w -> b n c h w', b = b)
     
     device = imgs.device
     h, w = imgs.shape[-2], imgs.shape[-1]
@@ -184,10 +208,12 @@ def render(T, frame_index):
     global c2w
     global fxfycxcy_t
     global batch
+    global device
     
     # TODO
     images, fxfycxcy, c2w = batch.image[frame_index:frame_index+1, :2], batch.fxfycxcy[frame_index:frame_index+1, :2], batch.c2w[frame_index:frame_index+1, :2],
-    
+    # images = torch.stack([c[frame_index] for c in cameras]).unsqueeze(0).to(device)
+
     with torch.no_grad(), torch.autocast(
         enabled=config.training.use_amp,
         device_type="cuda",
