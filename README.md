@@ -2,12 +2,7 @@
 
 | English | [Português](README_PT.md) |
 
-TODO
-A library that allows rendering...
-
-An OpenGL renderer for 3D Novel View Synthesis (NVS) PyTorch models that takes CUDA tensors and renders them directly.
-
-It uses the Python.h API to integrate the Python code with the OpenGL C++ code.
+An OpenGL renderer for 3D Novel View Synthesis (NVS) PyTorch models.
 
 For now, it can render [LVSM](https://github.com/Haian-Jin/LVSM) scenes.
 
