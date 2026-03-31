@@ -46,11 +46,11 @@ python render.py --module render_lvsm
 Controls are WASD for forward, left, backward, right, left ctrl/space for down/up and mouse for camera movement.
 Press ESC once to unlock the mouse and press twice to close.
 
-### Using with custom models
+### Using with other models
 
 #### As a module
 
-To render using a custom model, import and use the function `render_model` with the following format:
+To render using another model, import and use the function `render_model` with the following format:
 
 ```py
 render_model(n_frames, initial_T, render, device, render_resolution, window_resolution=(800, 800))
@@ -62,12 +62,12 @@ Where:
 - `initial_T: tensor`: Initial 4x4 camera transformation matrix
 - `render(T: tensor, frame_index: int) -> I: tensor`: A function that receives the current 4x4 camera transformation matrix and current frame index (which will be always zero in static NVS) and returns the rendered image (shape `(C=3, H, W)`) at that position
 - `device: str`: Which device to use (should be a CUDA device)
-- `render_resolution: (int, int)`: Which resolution to use for rendering images (should be the same as the shape of `render(T)` output)
+- `render_resolution: (int, int)`: Which resolution to use for rendering images (should have the same shape as `render(T)` output)
 - `window_resolution: (int, int)`: (optional) Which resolution to use for the window
 
 #### As a script
 
-Crate a module similar to render_lvsm.py that exports all the parameters described in the previous section.
+Crate a module similar to `render_lvsm.py` that exports all the parameters described in the previous section.
 
 Then do the usual configuration, build and run:
 
